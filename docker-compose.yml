@@ -1,0 +1,192 @@
+version: '3'
+
+services:
+  # Some other service connecting to mysql
+  # config depenses service 
+  service-depenses:
+    image: khouilikhadija/service-depenses:v1.0
+    depends_on:
+      mysqldb:
+        condition: service_healthy
+    restart: always
+    environment:
+      MYSQL_ALLOW_EMPTY_PASSWORD: "true"
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysqldb:3306/${MYSQLDB_DATABASE1}
+      SPRING_DATASOURCE_USERNAME: ${MYSQLDB_USER}
+      SPRING_DATASOURCE_PASSWORD: ${MYSQLDB_ROOT_PASSWORD}
+    volumes:
+    - ./service-depenses:/var/www/html
+    - /var/www/html/vendor
+    networks:
+      - api-gsAutoEcole
+    ports:
+      - 8087:8087
+    expose:
+      - 8087
+
+  # config cours service 
+  service-cours:
+    image: youssrabadda/cours-service:latest
+    depends_on:
+      mysqldb:
+        condition: service_healthy
+    restart: always
+    environment:
+      MYSQL_ALLOW_EMPTY_PASSWORD: "true"
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysqldb:3306/${MYSQLDB_DATABASE3} 
+      SPRING_DATASOURCE_USERNAME: ${MYSQLDB_USER}
+      SPRING_DATASOURCE_PASSWORD: ${MYSQLDB_ROOT_PASSWORD}
+    volumes:
+    - ./service-cours:/var/www/html
+    - /var/www/html/vendor
+    networks:
+      - api-gsAutoEcole
+    ports:
+      - 8084:8084
+    expose:
+      - 8084
+  # config employees service 
+
+  service-employees:
+    image: khouilikhadija/service-employees:v1.0
+    depends_on:
+      mysqldb:
+        condition: service_healthy
+    restart: always
+    environment:
+      MYSQL_ALLOW_EMPTY_PASSWORD: "true"
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysqldb:3306/${MYSQLDB_DATABASE2} 
+      SPRING_DATASOURCE_USERNAME: ${MYSQLDB_USER}
+      SPRING_DATASOURCE_PASSWORD: ${MYSQLDB_ROOT_PASSWORD}
+    volumes:
+    - ./service-employees:/var/www/html
+    - /var/www/html/vendor
+    networks:
+      - api-gsAutoEcole
+    ports:
+      - 8088:8088
+    expose:
+      - 8088
+  # config condidats service 
+
+  service-condidats:
+    image: youssrabadda/condidat-service:latest
+    depends_on:
+      mysqldb:
+        condition: service_healthy
+    restart: always
+    environment:
+      MYSQL_ALLOW_EMPTY_PASSWORD: "true"
+      SPRING_DATASOURCE_URL: jdbc:mariadb://mysqldb:3306/${MYSQLDB_DATABASE4} 
+      SPRING_DATASOURCE_USERNAME: ${MYSQLDB_USER}
+      SPRING_DATASOURCE_PASSWORD: ${MYSQLDB_ROOT_PASSWORD}
+    volumes:
+    - ./service-condidats:/var/www/html
+    - /var/www/html/vendor
+    networks:
+      - api-gsAutoEcole
+    ports:
+      - 8089:8089
+    expose:
+      - 8089
+  
+  
+  # config vehicule service 
+
+  service-vehicule:
+    image: chateriman/service-vehicule:v1
+    depends_on:
+      mysqldb:
+        condition: service_healthy
+    restart: always
+    environment:
+      - DB_HOST=mysqldb
+      - DB_PORT=3306
+      - DB_DATABASE=${MYSQLDB_DATABASE5} 
+      - DB_USERNAME=${MYSQLDB_USER}
+      - DB_PASSWORD=${MYSQLDB_ROOT_PASSWORD}
+
+    networks:
+      - api-gsAutoEcole
+    ports:
+      - 8900:8900
+    expose:
+      - 8900
+  
+  mysqldb:
+    container_name: mysqldb
+    image: mysql:latest
+    command: --default-authentication-plugin=mysql_native_password
+    environment:
+      # User for administration
+      MYSQL_ROOT_PASSWORD: ${MYSQLDB_ROOT_PASSWORD}
+      MYSQL_USER: ${MYSQLDB_USER}
+      MYSQL_PASSWORD: ${MYSQLDB_ROOT_PASSWORD}
+    volumes:
+      - ./database:/docker-entrypoint-initdb.d
+    ports:
+      - "3306:3306"
+    restart: always
+    networks:
+      - api-gsAutoEcole
+    healthcheck:
+      test: "exit 0"
+
+  appphpmyadmin:
+    container_name: appphpmyadmin
+    image: phpmyadmin:latest
+    environment:
+      PMA_HOST: mysqldb
+      PMA_PORT: 3306
+      PMA_ARBITRARY: 1
+    ports:
+      - "8090:80"
+    networks:
+      - api-gsAutoEcole
+    restart: always
+    depends_on:
+      mysqldb:
+        condition: service_healthy
+
+  api-gateway:
+    build:
+      context: ./api-gateway
+      dockerfile: Dockerfile
+    environment:
+      - PORT=3000
+      - DEPENSES_SERVICE=${DEPENSES_SERVICE}
+      - COURS_SERVICE=${COURS_SERVICE}
+      - EMPLOYEES_SERVICE=${EMPLOYEES_SERVICE}
+      - CONDIDATS_SERVICE=${CONDIDATS_SERVICE}
+      - VEHICULE_SERVICE=${VEHICULE_SERVICE}
+    deploy:
+      replicas: 3
+      restart_policy:
+        max_attempts: 3
+        condition: on-failure
+      update_config:
+        parallelism: 3
+        delay: 10s
+    volumes:
+      - ./api-gateway:/api-gateway
+    networks:
+      - api-gsAutoEcole
+
+  load-balancer:
+    image: nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./load-balancer/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - api-gateway
+    networks:
+      - api-gsAutoEcole
+    restart: always
+
+networks:
+  api-gsAutoEcole:
+volumes:
+  testdb1:
+    driver: local
